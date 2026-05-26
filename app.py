@@ -11,7 +11,7 @@ import os, re, json, sqlite3, threading, webbrowser
 from datetime import datetime, date, timedelta
 
 app = Flask(__name__)
-DB = "searches.db"
+DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "searches.db")
 
 # ── .env loader ───────────────────────────────────────────────────────────────
 
@@ -277,6 +277,7 @@ init_db()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    threading.Timer(1.5, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
-    print(f"EN->DE Dictionary running at http://127.0.0.1:{port}")
+    if "PORT" not in os.environ:
+        threading.Timer(1.5, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
+    print(f"EN->DE Dictionary running at http://0.0.0.0:{port}")
     app.run(host="0.0.0.0", port=port, debug=False)
