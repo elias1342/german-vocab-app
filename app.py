@@ -269,10 +269,14 @@ def history():
     ])
 
 
-# ── Launch ────────────────────────────────────────────────────────────────────
+# ── Startup (runs for both `python app.py` and gunicorn) ─────────────────────
+
+init_db()
+
+# ── Launch (local dev only) ───────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    init_db()
-    threading.Timer(1.5, lambda: webbrowser.open("http://127.0.0.1:5000")).start()
-    print("EN->DE Dictionary running at http://127.0.0.1:5000")
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    port = int(os.environ.get("PORT", 5000))
+    threading.Timer(1.5, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
+    print(f"EN->DE Dictionary running at http://127.0.0.1:{port}")
+    app.run(host="0.0.0.0", port=port, debug=False)
