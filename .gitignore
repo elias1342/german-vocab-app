@@ -1,0 +1,5 @@
+.env
+searches.db
+__pycache__/
+*.pyc
+*.pyo

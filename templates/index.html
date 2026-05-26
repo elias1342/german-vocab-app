@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EN &rarr; DE Dictionary</title>
+  <style>
+    :root {
+      --bg:        #f0f2f7;
+      --surface:   #ffffff;
+      --primary:   #4f46e5;
+      --pri-dark:  #3730a3;
+      --secondary: #7c3aed;
+      --text:      #1e293b;
+      --muted:     #64748b;
+      --border:    #e2e8f0;
+      --radius:    12px;
+      --shadow:    0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+      --shadow-lg: 0 12px 30px rgba(0,0,0,.12);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      padding: 3rem 1.5rem 4.8rem;
+      text-align: center;
+      color: #fff;
+    }
+    .hero h1 { font-size: 2.6rem; font-weight: 800; letter-spacing: -.03em; margin-bottom: .35rem; }
+    .hero .hero-sub { font-size: 1.05rem; opacity: .85; margin-bottom: 1.6rem; }
+
+    /* ── Mode tabs ── */
+    .mode-tabs {
+      display: inline-flex;
+      background: rgba(255,255,255,.18);
+      border-radius: 999px;
+      padding: .28rem;
+      gap: .15rem;
+    }
+    .mode-tab {
+      display: inline-flex; align-items: center; gap: .3rem;
+      padding: .46rem 1.5rem;
+      border: none; border-radius: 999px;
+      font-size: .9rem; font-weight: 700; cursor: pointer;
+      transition: background .18s, color .18s;
+      background: transparent; color: rgba(255,255,255,.75);
+    }
+    .mode-tab.active            { background: #fff; color: var(--primary); }
+    .mode-tab:not(.active):hover { background: rgba(255,255,255,.2); color: #fff; }
+
+    /* ── Due badge ── */
+    .due-badge {
+      display: none;
+      align-items: center; justify-content: center;
+      min-width: 20px; height: 20px;
+      background: #ef4444; color: #fff;
+      font-size: .62rem; font-weight: 900;
+      border-radius: 999px; padding: 0 .38rem;
+      line-height: 1;
+    }
+    .due-badge.visible { display: inline-flex; }
+    .mode-tab.active .due-badge { background: #ef4444; }
+
+    /* ── Search card ── */
+    .search-wrap {
+      max-width: 640px; margin: -1.8rem auto 0;
+      padding: 0 1.25rem; position: relative; z-index: 10;
+    }
+    .search-card { background: var(--surface); border-radius: 18px; padding: 1.4rem 1.5rem; box-shadow: var(--shadow-lg); }
+    .search-row  { display: flex; gap: .65rem; }
+    .search-input {
+      flex: 1; padding: .78rem 1.1rem;
+      border: 2px solid var(--border); border-radius: var(--radius);
+      font-size: 1.05rem; color: var(--text); outline: none;
+      transition: border-color .18s;
+    }
+    .search-input:focus { border-color: var(--primary); }
+
+    .btn-primary, .search-btn {
+      padding: .78rem 1.6rem;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: #fff; border: none; border-radius: var(--radius);
+      font-size: 1rem; font-weight: 700; cursor: pointer; white-space: nowrap;
+      transition: opacity .18s, transform .1s;
+    }
+    .btn-primary:hover, .search-btn:hover   { opacity: .88; }
+    .btn-primary:active, .search-btn:active { transform: scale(.97); }
+    .search-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+    /* ── Main ── */
+    .main { max-width: 900px; margin: 2.5rem auto; padding: 0 1.25rem 5rem; }
+
+    /* ── Loader ── */
+    #loader { display: none; text-align: center; padding: 3rem 1rem; color: var(--muted); }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 4px solid var(--border); border-top-color: var(--primary);
+      border-radius: 50%; animation: spin .75s linear infinite; margin: 0 auto 1rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Error ── */
+    .error-msg {
+      display: none; background: #fef2f2; border: 1px solid #fecaca;
+      border-radius: var(--radius); padding: 1rem 1.3rem;
+      color: #dc2626; margin-bottom: 1.5rem; font-weight: 500;
+    }
+
+    /* ── Results ── */
+    #results { display: none; animation: fadeUp .3s ease; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .word-heading { font-size: 2.2rem; font-weight: 800; letter-spacing: -.02em; color: var(--text); margin-bottom: .2rem; }
+    .word-sub     { color: var(--muted); margin-bottom: 1.8rem; font-size: .95rem; }
+
+    /* ── Etymology ── */
+    .etym-card {
+      background: linear-gradient(135deg, #eff6ff, #faf5ff);
+      border: 1px solid #c7d2fe; border-radius: var(--radius);
+      padding: 1.2rem 1.5rem; margin-bottom: 2rem;
+    }
+    .etym-label { font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--primary); margin-bottom: .4rem; }
+    .etym-card p { color: var(--text); line-height: 1.75; }
+
+    /* ── Section label ── */
+    .section-label { font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: .9rem; }
+
+    /* ── Translation cards ── */
+    .trans-grid { display: grid; gap: .9rem; margin-bottom: 2.5rem; }
+    .trans-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 1.2rem 1.4rem; box-shadow: var(--shadow);
+      display: grid; grid-template-columns: 36px 1fr; gap: 1rem; align-items: start;
+      transition: box-shadow .18s, transform .18s;
+    }
+    .trans-card:hover { box-shadow: 0 6px 18px rgba(79,70,229,.12); transform: translateY(-1px); }
+    .trans-num {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: #fff; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: .82rem; flex-shrink: 0; margin-top: 3px;
+    }
+    .trans-word { font-size: 1.35rem; font-weight: 700; color: var(--pri-dark); margin-bottom: .8rem; }
+    .example-box { background: #f8fafc; border-left: 3px solid var(--primary); border-radius: 0 8px 8px 0; padding: .8rem 1rem; }
+    .ex-label    { font-size: .65rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: .25rem; }
+    .ex-en  { font-size: .9rem; color: var(--text); }
+    .ex-de  { font-size: .9rem; color: var(--primary); font-style: italic; margin-top: .55rem; }
+    .ex-spacer { height: .45rem; }
+
+    /* ── History ── */
+    .history-wrap { margin-top: 3rem; border-top: 2px solid var(--border); padding-top: 2rem; }
+    .history-wrap h2 { font-size: 1.25rem; font-weight: 700; margin-bottom: 1.2rem; }
+    .empty-history {
+      text-align: center; color: var(--muted); padding: 2.5rem 1rem;
+      background: var(--surface); border-radius: var(--radius); border: 1px dashed var(--border);
+    }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+    thead tr { background: linear-gradient(135deg, var(--primary), var(--secondary)); color: #fff; }
+    th { padding: .85rem 1.25rem; text-align: left; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+    td { padding: .82rem 1.25rem; border-bottom: 1px solid var(--border); font-size: .93rem; }
+    tr:last-child td { border-bottom: none; }
+    tbody tr { transition: background .12s; }
+    tbody tr:hover { background: #f8fafc; }
+    .badge-new { display: inline-block; background: #dcfce7; color: #16a34a; font-size: .65rem; font-weight: 700; padding: .15rem .45rem; border-radius: 4px; text-transform: uppercase; vertical-align: middle; margin-left: .45rem; }
+    .context-badge { display: inline-block; background: #ede9fe; color: #6d28d9; font-size: .65rem; font-weight: 700; padding: .18rem .5rem; border-radius: 4px; text-transform: lowercase; vertical-align: middle; margin-left: .5rem; }
+
+    /* ════════════════════════════════════════
+       GAME
+    ════════════════════════════════════════ */
+    #practiceSection { display: none; }
+    .game-wrap { max-width: 620px; margin: 2.5rem auto; padding: 0 1.25rem 5rem; }
+
+    /* idle */
+    .game-idle { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow-lg); padding: 3.5rem 2rem; text-align: center; }
+    .idle-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 64px; height: 64px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: #fff; font-size: 1.35rem; font-weight: 900;
+      border-radius: 50%; margin: 0 auto 1.3rem;
+    }
+    .game-idle h2 { font-size: 1.6rem; font-weight: 800; margin-bottom: .5rem; }
+    .game-idle p  { color: var(--muted); margin-bottom: 2rem; line-height: 1.7; }
+    .all-done { color: #16a34a !important; font-weight: 600; }
+
+    /* progress */
+    .game-progress { margin-bottom: 1.5rem; }
+    .progress-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem; font-size: .85rem; font-weight: 600; color: var(--muted); }
+    .progress-meta .pts { color: var(--primary); font-weight: 800; }
+    .progress-track { height: 7px; background: var(--border); border-radius: 999px; overflow: hidden; }
+    .progress-fill  { height: 100%; background: linear-gradient(90deg, var(--primary), var(--secondary)); border-radius: 999px; transition: width .4s ease; }
+
+    /* word card */
+    .word-card {
+      background: var(--surface); border-radius: 18px; box-shadow: var(--shadow-lg);
+      padding: 2.8rem 2rem 2.2rem; text-align: center; margin-bottom: 1.3rem;
+      animation: fadeUp .25s ease;
+    }
+    .word-card .prompt-label { font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: .9rem; }
+    .word-card .en-word      { font-size: 3rem; font-weight: 800; letter-spacing: -.04em; color: var(--text); line-height: 1.1; }
+
+    /* answer row */
+    .answer-row { display: flex; gap: .65rem; margin-bottom: .75rem; }
+    .game-input {
+      flex: 1; padding: .82rem 1.1rem;
+      border: 2px solid var(--border); border-radius: var(--radius);
+      font-size: 1.05rem; color: var(--text); outline: none; transition: border-color .18s;
+    }
+    .game-input:focus    { border-color: var(--primary); }
+    .game-input:disabled { background: #f8fafc; color: var(--muted); }
+    .btn-skip {
+      width: 100%; padding: .75rem;
+      background: transparent; color: var(--muted);
+      border: 2px solid var(--border); border-radius: var(--radius);
+      font-size: .9rem; font-weight: 600; cursor: pointer;
+      transition: border-color .15s, color .15s;
+    }
+    .btn-skip:hover { border-color: #94a3b8; color: var(--text); }
+
+    /* feedback */
+    .feedback-card { border-radius: var(--radius); padding: 1.3rem 1.5rem; margin-bottom: 1.2rem; animation: fadeUp .2s ease; }
+    .feedback-card.correct { background: #f0fdf4; border: 1px solid #86efac; }
+    .feedback-card.partial { background: #fffbeb; border: 1px solid #fcd34d; }
+    .feedback-card.wrong   { background: #fef2f2; border: 1px solid #fecaca; }
+    .feedback-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .9rem; }
+    .feedback-status { font-size: 1.05rem; font-weight: 800; }
+    .feedback-card.correct .feedback-status { color: #16a34a; }
+    .feedback-card.partial .feedback-status { color: #d97706; }
+    .feedback-card.wrong   .feedback-status { color: #dc2626; }
+    .score-pill { font-size: .82rem; font-weight: 800; padding: .22rem .75rem; border-radius: 999px; }
+    .feedback-card.correct .score-pill { background: #dcfce7; color: #15803d; }
+    .feedback-card.partial .score-pill { background: #fef3c7; color: #b45309; }
+    .feedback-card.wrong   .score-pill { background: #fee2e2; color: #b91c1c; }
+    .feedback-body { font-size: .9rem; }
+    .fb-label   { font-size: .65rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-top: .65rem; margin-bottom: .2rem; }
+    .fb-answer  { color: var(--text); }
+    .fb-correct { color: #15803d; font-weight: 600; }
+    .next-review-note { font-size: .78rem; color: var(--muted); margin-top: .55rem; font-style: italic; }
+    .btn-next { width: 100%; padding: .9rem; background: linear-gradient(135deg, var(--primary), var(--secondary)); color: #fff; border: none; border-radius: var(--radius); font-size: 1rem; font-weight: 700; cursor: pointer; transition: opacity .18s; }
+    .btn-next:hover { opacity: .88; }
+
+    /* round end */
+    .round-end { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow-lg); padding: 3rem 2rem; text-align: center; animation: fadeUp .3s ease; }
+    .end-label   { font-size: .75rem; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: 1rem; }
+    .big-score   {
+      font-size: 5rem; font-weight: 800; letter-spacing: -.05em; line-height: 1;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      margin-bottom: .4rem;
+    }
+    .score-detail { color: var(--muted); font-size: .95rem; margin-bottom: .5rem; }
+    .end-grade    { font-size: 1.15rem; font-weight: 700; color: var(--text); margin-bottom: 1.8rem; }
+
+    /* session stats row */
+    .session-stats { display: flex; justify-content: center; gap: 1.8rem; margin-bottom: 1.6rem; }
+    .stat-block    { text-align: center; }
+    .stat-num      { font-size: 1.8rem; font-weight: 800; line-height: 1.1; }
+    .stat-num.correct { color: #16a34a; }
+    .stat-num.partial { color: #d97706; }
+    .stat-num.wrong   { color: #dc2626; }
+    .stat-label    { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-top: .15rem; }
+
+    /* next session banner */
+    .next-session-banner {
+      background: #eff6ff; border: 1px solid #bfdbfe;
+      border-radius: var(--radius); padding: .8rem 1.2rem;
+      font-size: .9rem; color: #1d4ed8; font-weight: 600;
+      margin-bottom: 2rem; text-align: center;
+    }
+    .next-session-banner.all-clear { background: #f0fdf4; border-color: #86efac; color: #15803d; }
+
+    @media (max-width: 600px) {
+      .hero h1 { font-size: 1.9rem; }
+      .search-row { flex-direction: column; }
+      .word-heading { font-size: 1.7rem; }
+      .word-card .en-word { font-size: 2.2rem; }
+      .big-score { font-size: 3.8rem; }
+      .answer-row { flex-direction: column; }
+      .session-stats { gap: 1.1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Hero ─────────────────────────────────────────────────────── -->
+<div class="hero">
+  <h1>EN &rarr; DE Dictionary</h1>
+  <p class="hero-sub">English to German &mdash; translations, examples &amp; etymology</p>
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tabLookup"   onclick="setMode('lookup')">Lookup</button>
+    <button class="mode-tab"        id="tabPractice" onclick="setMode('practice')">
+      Practice
+      <span class="due-badge" id="dueBadge"></span>
+    </button>
+  </div>
+</div>
+
+<!-- ── Lookup ────────────────────────────────────────────────────── -->
+<div id="lookupSection">
+  <div class="search-wrap">
+    <div class="search-card">
+      <div class="search-row">
+        <input id="wordInput" class="search-input" type="text"
+               placeholder="Enter an English word&hellip;" autocomplete="off" spellcheck="false" />
+        <button id="searchBtn" class="search-btn" onclick="lookup()">Translate</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div id="loader"><div class="spinner"></div><p>Fetching translations&hellip;</p></div>
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div id="results">
+      <div class="word-heading" id="wordHeading"></div>
+      <div class="word-sub">Top German translations with examples &amp; etymology</div>
+      <div class="etym-card" id="etymCard">
+        <div class="etym-label">Etymology</div>
+        <p id="etymText"></p>
+      </div>
+      <div class="section-label">German Translations</div>
+      <div class="trans-grid" id="transGrid"></div>
+    </div>
+
+    <div class="history-wrap">
+      <h2>Search History</h2>
+      <div id="historyContainer">
+        <div class="empty-history">No searches yet &mdash; try looking up a word above!</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Practice ──────────────────────────────────────────────────── -->
+<div id="practiceSection">
+  <div class="game-wrap">
+
+    <!-- Idle -->
+    <div id="gameIdle">
+      <div class="game-idle">
+        <div class="idle-badge">DE</div>
+        <h2>Vocabulary Practice</h2>
+        <p id="gameIdleMsg">Loading your word list&hellip;</p>
+        <button class="btn-primary" id="startBtn" style="display:none" onclick="startGame()">
+          Start Session
+        </button>
+      </div>
+    </div>
+
+    <!-- Playing -->
+    <div id="gamePlaying" style="display:none">
+      <div class="game-progress">
+        <div class="progress-meta">
+          <span id="progressText">Word 1 of 8</span>
+          <span class="pts" id="scoreText">0 pts</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      </div>
+      <div class="word-card">
+        <div class="prompt-label">Translate to German</div>
+        <div class="en-word" id="gameWord"></div>
+      </div>
+      <div class="answer-row">
+        <input id="gameInput" class="game-input" type="text"
+               placeholder="Type the German translation&hellip;" autocomplete="off" spellcheck="false" />
+        <button class="search-btn" onclick="submitAnswer()">Submit</button>
+      </div>
+      <button class="btn-skip" onclick="skipWord()">I don&rsquo;t know</button>
+    </div>
+
+    <!-- Feedback -->
+    <div id="gameFeedback" style="display:none">
+      <div class="game-progress">
+        <div class="progress-meta">
+          <span id="fbProgressText">Word 1 of 8</span>
+          <span class="pts" id="fbScoreText">0 pts</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="fbProgressFill" style="width:0%"></div></div>
+      </div>
+      <div class="feedback-card" id="feedbackCard">
+        <div class="feedback-header">
+          <span class="feedback-status" id="feedbackStatus"></span>
+          <span class="score-pill"      id="feedbackScore"></span>
+        </div>
+        <div class="feedback-body">
+          <div class="fb-label">Your answer</div>
+          <div class="fb-answer"  id="fbAnswer"></div>
+          <div class="fb-label">Correct translations</div>
+          <div class="fb-correct" id="fbCorrect"></div>
+          <div class="next-review-note" id="nextReviewNote"></div>
+        </div>
+      </div>
+      <button class="btn-next" id="nextBtn" onclick="nextWord()">Next Word &rarr;</button>
+    </div>
+
+    <!-- Round end -->
+    <div id="gameEnd" style="display:none">
+      <div class="round-end">
+        <div class="end-label">Session Complete</div>
+        <div class="big-score"    id="endPercent"></div>
+        <div class="score-detail" id="endDetail"></div>
+        <div class="end-grade"    id="endGrade"></div>
+        <div class="session-stats">
+          <div class="stat-block"><div class="stat-num correct" id="statCorrect">0</div><div class="stat-label">Correct</div></div>
+          <div class="stat-block"><div class="stat-num partial" id="statPartial">0</div><div class="stat-label">Almost</div></div>
+          <div class="stat-block"><div class="stat-num wrong"   id="statWrong">0</div><div class="stat-label">Skipped</div></div>
+        </div>
+        <div class="next-session-banner" id="nextSessionBanner"></div>
+        <button class="btn-primary" onclick="initGame()">Practice Again</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ── Lookup ─────────────────────────────────────────────────────
+
+  loadHistory();
+  loadDueBadge();
+
+  document.getElementById('wordInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') lookup();
+  });
+
+  async function lookup() {
+    const input = document.getElementById('wordInput');
+    const word  = input.value.trim();
+    if (!word) { input.focus(); return; }
+    setLoading(true);
+    hideError();
+    document.getElementById('results').style.display = 'none';
+    try {
+      const res  = await fetch('/api/lookup', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({word}),
+      });
+      const data = await res.json();
+      if (!res.ok) { showError(data.error || 'Something went wrong.'); return; }
+      renderResults(data);
+      await loadHistory();
+      loadDueBadge();
+    } catch (_) {
+      showError('Network error — please check your connection and try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function renderResults(data) {
+    document.getElementById('wordHeading').textContent = data.word;
+    const etymCard = document.getElementById('etymCard');
+    if (data.etymology) {
+      document.getElementById('etymText').textContent = data.etymology;
+      etymCard.style.display = 'block';
+    } else {
+      etymCard.style.display = 'none';
+    }
+    const grid = document.getElementById('transGrid');
+    grid.innerHTML = '';
+    const translations = data.translations || [];
+    if (!translations.length) {
+      grid.innerHTML = '<p style="color:var(--muted)">No translations found for this word.</p>';
+    } else {
+      translations.forEach((trans, i) => {
+        const card = document.createElement('div');
+        card.className = 'trans-card';
+        let exHtml = '';
+        if (trans.example_en) {
+          exHtml = `
+            <div class="example-box">
+              <div class="ex-label">Example sentence</div>
+              <div class="ex-en">${esc(trans.example_en)}</div>
+              ${trans.example_de ? `<div class="ex-spacer"></div><div class="ex-label">Auf Deutsch</div><div class="ex-de">${esc(trans.example_de)}</div>` : ''}
+            </div>`;
+        }
+        card.innerHTML = `
+          <div class="trans-num">${i + 1}</div>
+          <div>
+            <div class="trans-word">
+              ${esc(trans.german)}
+              ${trans.context ? `<span class="context-badge">${esc(trans.context)}</span>` : ''}
+            </div>
+            ${exHtml}
+          </div>`;
+        grid.appendChild(card);
+      });
+    }
+    const resultsEl = document.getElementById('results');
+    resultsEl.style.display = 'block';
+    resultsEl.scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
+
+  async function loadHistory() {
+    try {
+      const res  = await fetch('/api/history');
+      const data = await res.json();
+      renderHistory(data);
+    } catch (_) {}
+  }
+
+  function renderHistory(rows) {
+    const container = document.getElementById('historyContainer');
+    if (!rows.length) {
+      container.innerHTML = '<div class="empty-history">No searches yet &mdash; try looking up a word above!</div>';
+      return;
+    }
+    container.innerHTML = `
+      <table>
+        <thead><tr><th>English</th><th>German Translations</th><th>Timestamp</th></tr></thead>
+        <tbody>
+          ${rows.map((r, i) => `
+            <tr>
+              <td><strong>${esc(r.word)}</strong>${i === 0 ? '<span class="badge-new">new</span>' : ''}</td>
+              <td>${esc(r.translations || '—')}</td>
+              <td style="color:var(--muted);font-size:.82rem">${esc(r.timestamp)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  function setLoading(on) {
+    document.getElementById('loader').style.display  = on ? 'block' : 'none';
+    document.getElementById('searchBtn').disabled    = on;
+    document.getElementById('searchBtn').textContent = on ? 'Loading…' : 'Translate';
+  }
+  function showError(msg) { const el = document.getElementById('errorMsg'); el.textContent = msg; el.style.display = 'block'; }
+  function hideError()    { document.getElementById('errorMsg').style.display = 'none'; }
+
+  async function loadDueBadge() {
+    try {
+      const res  = await fetch('/api/due/count');
+      const data = await res.json();
+      const badge = document.getElementById('dueBadge');
+      if (data.count > 0) {
+        badge.textContent = data.count;
+        badge.classList.add('visible');
+      } else {
+        badge.classList.remove('visible');
+      }
+    } catch (_) {}
+  }
+
+  // ── Mode switch ────────────────────────────────────────────────
+
+  function setMode(mode) {
+    document.getElementById('lookupSection').style.display   = mode === 'lookup'   ? 'block' : 'none';
+    document.getElementById('practiceSection').style.display = mode === 'practice' ? 'block' : 'none';
+    document.getElementById('tabLookup').classList.toggle('active',   mode === 'lookup');
+    document.getElementById('tabPractice').classList.toggle('active', mode === 'practice');
+    if (mode === 'practice') initGame();
+    if (mode === 'lookup')   loadDueBadge();
+  }
+
+  // ── Game state ─────────────────────────────────────────────────
+
+  let gameWords   = [];
+  let gameQueue   = [];
+  let gameIndex   = 0;
+  let gameScores  = [];
+  let gameCorrect = 0;
+  let gamePartial = 0;
+  let gameWrong   = 0;
+  let currentWord = null;
+
+  async function initGame() {
+    showPanel('gameIdle');
+    document.getElementById('startBtn').style.display = 'none';
+    const msg = document.getElementById('gameIdleMsg');
+    msg.className = '';
+    msg.textContent = 'Loading your review queue…';
+
+    try {
+      const res = await fetch('/api/game/words');
+      gameWords = await res.json();
+    } catch (_) {
+      msg.textContent = 'Could not load words. Make sure the server is running.';
+      return;
+    }
+
+    if (!gameWords.length) {
+      msg.className   = 'all-done';
+      msg.textContent = 'All caught up! No words are due for review today. Look up more words or check back tomorrow.';
+      return;
+    }
+
+    const n = gameWords.length;
+    msg.textContent = `${n} word${n === 1 ? '' : 's'} due for review today.`;
+    document.getElementById('startBtn').style.display = 'inline-block';
+  }
+
+  function startGame() {
+    gameQueue   = shuffle([...Array(gameWords.length).keys()]);
+    gameIndex   = 0;
+    gameScores  = [];
+    gameCorrect = 0;
+    gamePartial = 0;
+    gameWrong   = 0;
+    showWord();
+  }
+
+  function showWord() {
+    showPanel('gamePlaying');
+    const idx   = gameQueue[gameIndex];
+    currentWord = gameWords[idx];
+    const total = gameQueue.length;
+
+    document.getElementById('gameWord').textContent     = currentWord.word;
+    document.getElementById('progressText').textContent = `Word ${gameIndex + 1} of ${total}`;
+    document.getElementById('scoreText').textContent    = totalPts() + ' pts';
+    document.getElementById('progressFill').style.width = (gameIndex / total * 100) + '%';
+
+    const inp = document.getElementById('gameInput');
+    inp.value = ''; inp.disabled = false; inp.focus();
+    inp.onkeydown = e => { if (e.key === 'Enter') submitAnswer(); };
+  }
+
+  async function submitAnswer() { await recordAnswer(document.getElementById('gameInput').value.trim()); }
+  async function skipWord()     { await recordAnswer(''); }
+
+  async function recordAnswer(answer) {
+    document.getElementById('gameInput').disabled = true;
+
+    const score = answer ? scoreAnswer(answer, currentWord.translations) : 0;
+    gameScores.push(score);
+    if (score === 100) gameCorrect++;
+    else if (score > 0) gamePartial++;
+    else gameWrong++;
+
+    // Update schedule (awaited so end-of-round next-session query is accurate)
+    let newInterval = null, newNextReview = null;
+    try {
+      const r = await fetch('/api/game/schedule', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({word: currentWord.word, score}),
+      });
+      const d = await r.json();
+      newInterval   = d.interval;
+      newNextReview = d.next_review;
+    } catch (_) {}
+
+    // Progress
+    const total = gameQueue.length;
+    const pts   = totalPts();
+    document.getElementById('fbProgressText').textContent = `Word ${gameIndex + 1} of ${total}`;
+    document.getElementById('fbScoreText').textContent    = pts + ' pts';
+    document.getElementById('fbProgressFill').style.width = ((gameIndex + 1) / total * 100) + '%';
+
+    // Feedback card
+    const card   = document.getElementById('feedbackCard');
+    const status = document.getElementById('feedbackStatus');
+    const pill   = document.getElementById('feedbackScore');
+    if (score === 100) {
+      card.className = 'feedback-card correct';
+      status.textContent = 'Correct!'; pill.textContent = '+100 pts';
+    } else if (score > 0) {
+      card.className = 'feedback-card partial';
+      status.textContent = 'Almost!'; pill.textContent = `+${score} pts`;
+    } else {
+      card.className = 'feedback-card wrong';
+      status.textContent = answer ? 'Incorrect' : 'Skipped'; pill.textContent = '0 pts';
+    }
+
+    document.getElementById('fbAnswer').textContent  = answer || '(no answer)';
+    document.getElementById('fbCorrect').textContent = currentWord.translations.join(', ');
+
+    // Next review note
+    const noteEl = document.getElementById('nextReviewNote');
+    if (newInterval && newNextReview) {
+      const reviewDate = new Date(newNextReview + 'T00:00:00');
+      const today      = new Date(); today.setHours(0, 0, 0, 0);
+      const diff       = Math.round((reviewDate - today) / 86400000);
+      const when       = diff === 0 ? 'again today'
+                       : diff === 1 ? 'tomorrow'
+                       : `in ${diff} days`;
+      noteEl.textContent = `Next review ${when} (interval: ${newInterval}d)`;
+      noteEl.style.display = 'block';
+    } else {
+      noteEl.style.display = 'none';
+    }
+
+    const isLast = gameIndex === gameQueue.length - 1;
+    document.getElementById('nextBtn').textContent = isLast ? 'See Results' : 'Next Word →';
+    showPanel('gameFeedback');
+  }
+
+  function nextWord() {
+    gameIndex++;
+    if (gameIndex >= gameQueue.length) endRound(); else showWord();
+  }
+
+  async function endRound() {
+    showPanel('gameEnd');
+    const total  = gameQueue.length;
+    const pts    = totalPts();
+    const maxPts = total * 100;
+    const pct    = Math.round(pts / maxPts * 100);
+
+    document.getElementById('endPercent').textContent = pct + '%';
+    document.getElementById('endDetail').textContent  = `${pts} / ${maxPts} points · ${total} word${total === 1 ? '' : 's'}`;
+    document.getElementById('endGrade').textContent   =
+      pct >= 90 ? 'Excellent work!'
+      : pct >= 70 ? 'Good job!'
+      : pct >= 50 ? 'Keep practicing!'
+      : "Keep at it — you'll get there!";
+
+    document.getElementById('statCorrect').textContent = gameCorrect;
+    document.getElementById('statPartial').textContent = gamePartial;
+    document.getElementById('statWrong').textContent   = gameWrong;
+
+    // Fetch next session info
+    const banner = document.getElementById('nextSessionBanner');
+    try {
+      const res  = await fetch('/api/game/next-session');
+      const data = await res.json();
+      if (data.next_date) {
+        const nextDate = new Date(data.next_date + 'T00:00:00');
+        const today    = new Date(); today.setHours(0, 0, 0, 0);
+        const diff     = Math.round((nextDate - today) / 86400000);
+        const when     = diff === 1 ? 'tomorrow' : `in ${diff} days`;
+        banner.className   = 'next-session-banner';
+        banner.textContent = `Next session ${when}: ${data.count} word${data.count === 1 ? '' : 's'} due`;
+      } else {
+        banner.className   = 'next-session-banner all-clear';
+        banner.textContent = 'All words reviewed — check back tomorrow!';
+      }
+    } catch (_) {
+      banner.style.display = 'none';
+    }
+
+    loadDueBadge();
+  }
+
+  // ── Game helpers ───────────────────────────────────────────────
+
+  function showPanel(id) {
+    ['gameIdle','gamePlaying','gameFeedback','gameEnd'].forEach(p => {
+      document.getElementById(p).style.display = p === id ? 'block' : 'none';
+    });
+  }
+
+  function totalPts() { return gameScores.reduce((a, b) => a + b, 0); }
+
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function levenshtein(a, b) {
+    const m = a.length, n = b.length;
+    const dp = Array.from({length: m + 1}, (_, i) => [i]);
+    for (let j = 1; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++)
+      for (let j = 1; j <= n; j++)
+        dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+    return dp[m][n];
+  }
+
+  function scoreAnswer(answer, translations) {
+    const ans = answer.toLowerCase();
+    let best = 0;
+    for (const t of translations) {
+      const correct = t.toLowerCase();
+      if (ans === correct) return 100;
+      const dist = levenshtein(ans, correct);
+      const s    = Math.max(0, Math.round((1 - dist / Math.max(ans.length, correct.length)) * 100));
+      if (s > best) best = s;
+    }
+    return best;
+  }
+
+  function esc(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>
