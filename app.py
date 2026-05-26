@@ -8,12 +8,12 @@ except ImportError:
 
 import openai as openai_lib
 import os, re, json, sqlite3, threading, webbrowser
+from contextlib import contextmanager
 from datetime import datetime, date, timedelta
 
 app = Flask(__name__)
-DB = "/tmp/searches.db" if os.environ.get("PORT") else os.path.join(os.path.dirname(os.path.abspath(__file__)), "searches.db")
 
-# ── .env loader ───────────────────────────────────────────────────────────────
+# ── .env loader (must run before env-var reads below) ────────────────────────
 
 _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 if os.path.exists(_env_path):
@@ -24,22 +24,80 @@ if os.path.exists(_env_path):
                 _k, _v = _line.split("=", 1)
                 os.environ.setdefault(_k.strip(), _v.strip().strip("\"'"))
 
-# ── Database ──────────────────────────────────────────────────────────────────
+# ── Database config ───────────────────────────────────────────────────────────
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+# SQLite fallback path (only used when DATABASE_URL is not set)
+DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "searches.db")
+
+
+def _sql(query):
+    """Convert SQLite-style ? placeholders to PostgreSQL %s."""
+    if DATABASE_URL:
+        return query.replace("?", "%s")
+    return query
+
+
+@contextmanager
+def _db():
+    """Yield an active DB cursor; commit on clean exit, rollback on error."""
+    if DATABASE_URL:
+        import psycopg2
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        try:
+            yield cur
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
+    else:
+        conn = sqlite3.connect(DB)
+        cur = conn.cursor()
+        try:
+            yield cur
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
 
 def init_db():
-    with sqlite3.connect(DB) as c:
-        c.execute(
-            """CREATE TABLE IF NOT EXISTS searches (
-                id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                word      TEXT    NOT NULL,
-                top_trans TEXT,
-                ts        TEXT    NOT NULL
-            )"""
-        )
-        try:
-            c.execute("ALTER TABLE searches ADD COLUMN all_trans TEXT")
-        except Exception:
-            pass
+    with _db() as c:
+        if DATABASE_URL:
+            # PostgreSQL: SERIAL for auto-increment, include all_trans upfront
+            c.execute(
+                """CREATE TABLE IF NOT EXISTS searches (
+                    id        SERIAL PRIMARY KEY,
+                    word      TEXT   NOT NULL,
+                    top_trans TEXT,
+                    all_trans TEXT,
+                    ts        TEXT   NOT NULL
+                )"""
+            )
+            # Safe no-op if column already exists (handles schema migration)
+            c.execute(
+                "ALTER TABLE searches ADD COLUMN IF NOT EXISTS all_trans TEXT"
+            )
+        else:
+            # SQLite: AUTOINCREMENT syntax
+            c.execute(
+                """CREATE TABLE IF NOT EXISTS searches (
+                    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                    word      TEXT    NOT NULL,
+                    top_trans TEXT,
+                    ts        TEXT    NOT NULL
+                )"""
+            )
+            try:
+                c.execute("ALTER TABLE searches ADD COLUMN all_trans TEXT")
+            except Exception:
+                pass  # column already exists in existing DB
         c.execute(
             """CREATE TABLE IF NOT EXISTS word_schedule (
                 word        TEXT    PRIMARY KEY,
@@ -115,11 +173,6 @@ def lookup_word(word):
 # ── SM-2 (simplified) ─────────────────────────────────────────────────────────
 
 def _next_interval(current, score):
-    """
-    score 100  → interval doubles  (1→2→4→8…)
-    score 1-99 → interval +1 day
-    score 0    → reset to 1 day
-    """
     if score == 100:
         return max(1, current) * 2
     elif score > 0:
@@ -156,9 +209,9 @@ def lookup():
     top    = result["translations"][0]["german"] if result["translations"] else ""
     all_de = ", ".join(t["german"] for t in result["translations"] if t["german"])
     ts     = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with sqlite3.connect(DB) as c:
+    with _db() as c:
         c.execute(
-            "INSERT INTO searches (word, top_trans, all_trans, ts) VALUES (?,?,?,?)",
+            _sql("INSERT INTO searches (word, top_trans, all_trans, ts) VALUES (?,?,?,?)"),
             (word, top, all_de, ts),
         )
 
@@ -167,21 +220,21 @@ def lookup():
 
 @app.route("/api/game/words")
 def game_words():
-    """Return words due for review today (next_review <= today or no schedule entry)."""
     today = date.today().isoformat()
-    with sqlite3.connect(DB) as c:
-        rows = c.execute(
-            """SELECT s.word, s.all_trans, s.top_trans,
-                      COALESCE(ws.interval, 1) AS interval
-               FROM searches s
-               JOIN (SELECT word, MAX(id) AS maxid FROM searches GROUP BY word) latest
-                    ON s.id = latest.maxid
-               LEFT JOIN word_schedule ws ON ws.word = s.word
-               WHERE COALESCE(s.all_trans, s.top_trans, '') != ''
-                 AND (ws.word IS NULL OR ws.next_review <= ?)
-               ORDER BY COALESCE(ws.next_review, ?) ASC""",
-            (today, today)
-        ).fetchall()
+    with _db() as c:
+        c.execute(
+            _sql("""SELECT s.word, s.all_trans, s.top_trans,
+                          COALESCE(ws.interval, 1) AS interval
+                   FROM searches s
+                   JOIN (SELECT word, MAX(id) AS maxid FROM searches GROUP BY word) latest
+                        ON s.id = latest.maxid
+                   LEFT JOIN word_schedule ws ON ws.word = s.word
+                   WHERE COALESCE(s.all_trans, s.top_trans, '') != ''
+                     AND (ws.word IS NULL OR ws.next_review <= ?)
+                   ORDER BY COALESCE(ws.next_review, ?) ASC"""),
+            (today, today),
+        )
+        rows = c.fetchall()
     words = []
     for word, all_trans, top_trans, interval in rows:
         trans_str    = all_trans or top_trans or ""
@@ -193,7 +246,6 @@ def game_words():
 
 @app.route("/api/game/schedule", methods=["POST"])
 def update_schedule():
-    """Record the result of a game answer and update the review schedule."""
     body  = request.get_json(silent=True) or {}
     word  = (body.get("word") or "").strip().lower()
     score = int(body.get("score", 0))
@@ -201,21 +253,20 @@ def update_schedule():
         return jsonify(error="word required"), 400
 
     today = date.today()
-    with sqlite3.connect(DB) as c:
-        row = c.execute(
-            "SELECT interval FROM word_schedule WHERE word = ?", (word,)
-        ).fetchone()
+    with _db() as c:
+        c.execute(_sql("SELECT interval FROM word_schedule WHERE word = ?"), (word,))
+        row      = c.fetchone()
         current  = row[0] if row else 1
         new_int  = _next_interval(current, score)
         new_date = (today + timedelta(days=new_int)).isoformat()
         if row:
             c.execute(
-                "UPDATE word_schedule SET interval=?, next_review=? WHERE word=?",
+                _sql("UPDATE word_schedule SET interval=?, next_review=? WHERE word=?"),
                 (new_int, new_date, word),
             )
         else:
             c.execute(
-                "INSERT INTO word_schedule (word, interval, next_review) VALUES (?,?,?)",
+                _sql("INSERT INTO word_schedule (word, interval, next_review) VALUES (?,?,?)"),
                 (word, new_int, new_date),
             )
     return jsonify(interval=new_int, next_review=new_date)
@@ -223,53 +274,58 @@ def update_schedule():
 
 @app.route("/api/due/count")
 def due_count():
-    """Count words due for review today."""
     today = date.today().isoformat()
-    with sqlite3.connect(DB) as c:
-        row = c.execute(
-            """SELECT COUNT(*) FROM (
-                 SELECT s.word
-                 FROM searches s
-                 JOIN (SELECT word, MAX(id) AS maxid FROM searches GROUP BY word) latest
-                      ON s.id = latest.maxid
-                 LEFT JOIN word_schedule ws ON ws.word = s.word
-                 WHERE COALESCE(s.all_trans, s.top_trans, '') != ''
-                   AND (ws.word IS NULL OR ws.next_review <= ?)
-               )""", (today,)
-        ).fetchone()
+    with _db() as c:
+        c.execute(
+            _sql("""SELECT COUNT(*) FROM (
+                     SELECT s.word
+                     FROM searches s
+                     JOIN (SELECT word, MAX(id) AS maxid FROM searches GROUP BY word) latest
+                          ON s.id = latest.maxid
+                     LEFT JOIN word_schedule ws ON ws.word = s.word
+                     WHERE COALESCE(s.all_trans, s.top_trans, '') != ''
+                       AND (ws.word IS NULL OR ws.next_review <= ?)
+                   ) AS sub"""),
+            (today,),
+        )
+        row = c.fetchone()
     return jsonify({"count": row[0]})
 
 
 @app.route("/api/game/next-session")
 def next_session():
-    """Return the next future date when words are due and how many."""
     today = date.today().isoformat()
-    with sqlite3.connect(DB) as c:
-        row = c.execute(
-            "SELECT MIN(next_review) FROM word_schedule WHERE next_review > ?", (today,)
-        ).fetchone()
+    with _db() as c:
+        c.execute(
+            _sql("SELECT MIN(next_review) FROM word_schedule WHERE next_review > ?"),
+            (today,),
+        )
+        row       = c.fetchone()
         next_date = row[0] if row and row[0] else None
-        count = 0
+        count     = 0
         if next_date:
-            count = c.execute(
-                "SELECT COUNT(*) FROM word_schedule WHERE next_review = ?", (next_date,)
-            ).fetchone()[0]
+            c.execute(
+                _sql("SELECT COUNT(*) FROM word_schedule WHERE next_review = ?"),
+                (next_date,),
+            )
+            count = c.fetchone()[0]
     return jsonify({"next_date": next_date, "count": count})
 
 
 @app.route("/api/history")
 def history():
-    with sqlite3.connect(DB) as c:
-        rows = c.execute(
+    with _db() as c:
+        c.execute(
             "SELECT word, all_trans, top_trans, ts FROM searches ORDER BY id DESC LIMIT 100"
-        ).fetchall()
+        )
+        rows = c.fetchall()
     return jsonify([
         {"word": r[0], "translations": r[1] or r[2] or "—", "timestamp": r[3]}
         for r in rows
     ])
 
 
-# ── Startup (runs for both `python app.py` and gunicorn) ─────────────────────
+# ── Startup ───────────────────────────────────────────────────────────────────
 
 init_db()
 
