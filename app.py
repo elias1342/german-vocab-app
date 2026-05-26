@@ -11,7 +11,7 @@ import os, re, json, sqlite3, threading, webbrowser
 from datetime import datetime, date, timedelta
 
 app = Flask(__name__)
-DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "searches.db")
+DB = "/tmp/searches.db" if os.environ.get("PORT") else os.path.join(os.path.dirname(os.path.abspath(__file__)), "searches.db")
 
 # ── .env loader ───────────────────────────────────────────────────────────────
 
