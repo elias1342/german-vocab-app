@@ -1,5 +1,6 @@
 .env
 searches.db
+NOTES.md
 __pycache__/
 *.pyc
 *.pyo
